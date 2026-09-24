@@ -172,6 +172,137 @@ the result panel, and the CLI writes `score.abc` when `--out-dir` is set:
 # -> yue2_out/score.abc
 ```
 
+## Semantic Token Export
+
+Set `export_semantic=true` to attach the semantic stage output as a `semantic`
+artifact (`application/vnd.yue2.semantic+json`). The payload is a flat JSON
+array of codec indices, one integer per semantic frame (25 frames per second)
+in `[0, 32768)`, without the stop token. The CLI writes `semantic.json` when
+`--out-dir` is set:
+
+```bash
+./build/debug/bin/audiocpp_cli \
+  --task gen \
+  --family yue2 \
+  --model models/Yue2-3B-GGUF \
+  --backend cuda \
+  --threads 8 \
+  --lyrics "..." \
+  --request-option style="English, folk pop" \
+  --request-option export_semantic=true \
+  --seed 1234 \
+  --out yue2.wav \
+  --out-dir yue2_out \
+  --log
+# -> yue2_out/semantic.json
+```
+
+The artifact meta carries `frames` (the number of indices) and `truncated`
+(`true` when the stage stopped on `semantic_max_tokens` instead of the stop
+token).
+
+The indices are the same values the reference YuE2 Python pipeline stores in its
+`semantic.npy` (1-D `int32`). To convert:
+
+```bash
+python3 -c "import json, numpy; numpy.save('semantic.npy', numpy.array(json.load(open('semantic.json')), dtype=numpy.int32))"
+```
+
+## Stopping Early
+
+`stop_after` ends the run before the remaining stages:
+
+| Value | Runs | Produces |
+|---|---|---|
+| `abc` | ABC planner | `score` artifact |
+| `semantic` | ABC planner, semantic AR | `score` and `semantic` artifacts |
+| `audio` | everything | audio, plus `score`; `semantic` with `export_semantic=true` |
+
+`stop_after=abc` requires `cot=melody` or `cot=full` and no external
+`abc` / `abc_file`, because there would be nothing to generate.
+`stop_after=semantic` implies `export_semantic=true`, since the token stream is
+all that stage produces.
+
+A result from `abc` or `semantic` carries **no audio**. Use `--out-dir` on the
+CLI to collect the artifacts (`--out` writes nothing), and `/v1/tasks/run` on
+the server — `/v1/audio/speech` requires an audio output.
+
+```bash
+./build/debug/bin/audiocpp_cli \
+  --task gen \
+  --family yue2 \
+  --model models/Yue2-3B-GGUF \
+  --backend cuda \
+  --threads 8 \
+  --lyrics "..." \
+  --request-option style="English, folk pop" \
+  --request-option stop_after=semantic \
+  --seed 1234 \
+  --out-dir yue2_out \
+  --log
+# -> yue2_out/score.abc, yue2_out/semantic.json
+```
+
+## Continuing From Semantic Tokens
+
+`semantic_prefix` takes a JSON array of semantic codec indices, one per frame at
+25 frames per second, each in `[0,32768)`. The frames become forced history: the
+AR stage prefills them behind the prompt and samples the rest of the song from
+frame `N`. `semantic_prefix_file` reads the same text from a file and is ignored
+when `semantic_prefix` is set.
+
+The returned stream, and therefore the NAR stage and the rendered audio, includes
+the forced frames. `semantic_min_tokens`, `semantic_max_tokens` and the
+repetition penalty window all count the total stream, so `semantic_max_tokens`
+must be at least `N`.
+
+```bash
+./build/debug/bin/audiocpp_cli \
+  --task gen \
+  --family yue2 \
+  --model models/Yue2-3B-GGUF \
+  --backend cuda \
+  --threads 8 \
+  --lyrics "..." \
+  --request-option style="English, folk pop" \
+  --request-option cot=off \
+  --request-option semantic_prefix_file=/path/to/semantic.json \
+  --request-option semantic_max_tokens=1200 \
+  --seed 1234 \
+  --out yue2-continue.wav \
+  --log
+```
+
+With `cot=melody` or `cot=full` a prefix also requires `abc` or `abc_file`:
+without a score the run would plan a new one that the forced frames do not
+belong to.
+
+To render exactly the given frames and sample nothing, set both token bounds to
+`N`:
+
+```bash
+  --request-option semantic_min_tokens=640 \
+  --request-option semantic_max_tokens=640
+```
+
+That run skips the AR stage: the given frames are the stream, and with
+`stop_after=semantic` they are returned as they came. `stop_after=audio` still
+prefills them once for the NAR conditioning.
+
+Results are deterministic for a given request, but a prefix does not reproduce
+the draws of an uninterrupted run: the sampler RNG starts at the first sampled
+frame, and prefilled K/V differ numerically from step-decoded K/V.
+
+With a guidance scale other than `1.0` the forced frames are appended to both the
+positive and the negative prefix, and that path prefills through host K/V, so
+memory grows with `N`. The default `cot=full` route uses scale `1.0`, which runs a
+single stream on the device.
+
+A prefix does not have to come from the run it continues. Splicing the tokens of
+two renders of one score changes a song's style part-way through;
+[examples/yue2_style_change](../../examples/yue2_style_change/) is a complete
+script for it.
+
 ## Common Options (use directly)
 
 | Option | Values | Default | Meaning |
@@ -186,9 +317,13 @@ the result panel, and the CLI writes `score.abc` when `--out-dir` is set:
 |---|---|---:|---|
 | `style` | text | required | Music style prompt. |
 | `cot` | `off`, `melody`, `full` | `full` | Symbolic planning route. |
+| `stop_after` | `abc`, `semantic`, `audio` | `audio` | Last stage to run. See "Stopping Early". |
 | `abc` | ABC text | empty | Inline ABC score; requires `cot=melody` or `cot=full`. |
 | `abc_file` | path | empty | ABC score file; requires `cot=melody` or `cot=full`. |
 | `nar_noise_file` | raw float32 file | empty | Provide a noise file for NAR generation, shaped `[frames,64]`. |
+| `export_semantic` | `true`, `false` | `false` | Attach the semantic token stream as a `semantic` artifact. |
+| `semantic_prefix` | JSON array of codec indices | empty | Inline semantic frames to force at the start of the music stream. |
+| `semantic_prefix_file` | path | empty | File holding the same JSON array; ignored when `semantic_prefix` is set. |
 | `guidance_scale` | `0..20` | `1.01` for `cot=off`, otherwise `1.0` | Semantic classifier-free guidance scale. Legacy alias: `cfg_scale`. |
 | `num_inference_steps` | integer > 0 | `8` | NAR midpoint ODE steps. |
 | `seed` | integer in `[0, 2^63)` | `1234` | Generation seed. Equivalent to `--seed <n>`. |
@@ -232,6 +367,7 @@ the result panel, and the CLI writes `score.abc` when `--out-dir` is set:
 | `yue2.nar_graph_arena_mb` | MiB integer >= 1 | `6144` | NAR acoustic flow graph arena size. |
 | `yue2.vae_graph_arena_mb` | MiB integer >= 1 | `1536` | VAE decode graph arena size. |
 | `yue2.attention` | `auto`, `flash`, `eager` | `auto` | NAR acoustic-flow attention kernel. `auto` uses flash, except on Volta/Turing CUDA GPUs (missing MMA kernels) and Intel Vulkan GPUs (eager measured 2.2x faster) where it uses eager; explicit `flash` / `eager` override the probe. The AR decode path always uses flash. |
+| `yue2.attention_tile_rows` | integer >= 0 | `0` | Query rows per tile in the eager NAR attention. The eager lowering holds the whole score matrix, which grows with the square of the song length; `0` splits the query rows into as few equal tiles as keep one tile's scores under 3 GiB, which is what long songs need on drivers that cap a single buffer at 4 GiB. A song whose scores already fit runs as one tile. Ignored by the flash kernel. |
 
 ## Parity Probes
 
