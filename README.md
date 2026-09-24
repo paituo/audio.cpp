@@ -129,6 +129,7 @@ Model weights keep the license of their original release, which is separate from
 | **vibevoice_asr** | ASR | auto | VibeVoice ASR | GGUF 16/Q8 |
 | **vibevoice_asr_streaming** | ASR | en, zh, es, pt, de, ja, ko, fr, ru, it | VibeVoice ASR Streaming 7B/1.5B with persistent decoder state and speaker turns | GGUF BF16/Q8/Q4, Stream |
 | **voxtral_realtime** | ASR | auto | Voxtral-Mini-4B-Realtime-2602 | GGUF 16/Q8/Q4, Stream |
+| **whisper** | ASR | en, zh, ja, ko, es, fr, de, ru | Whisper multilingual (tiny) | GGUF 16/Q8, offline |
 
 ### Audio Conversion And Processing
 

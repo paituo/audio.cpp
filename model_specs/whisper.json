@@ -1,0 +1,240 @@
+{
+  "family": "whisper",
+  "schema_version": 1,
+  "display_name": "Whisper (multilingual ASR)",
+  "description": "OpenAI Whisper multilingual speech recognition family (whisper-tiny architecture). KV-cache streaming decoder with greedy or beam-search decoding, optional translate and timestamp/segment output; long audio (>30s) is auto-split on quiet-energy boundaries. Supports offline and streaming (sliding-window) transcription.",
+  "category": "asr",
+  "status": "wip",
+  "tasks": [
+    "asr"
+  ],
+  "modes": [
+    "offline",
+    "streaming"
+  ],
+  "languages": [
+    "en",
+    "zh",
+    "ja",
+    "ko",
+    "es",
+    "fr",
+    "de",
+    "ru"
+  ],
+  "capabilities": {
+    "asr": [
+      "segments",
+      "word_timestamps"
+    ]
+  },
+  "dependencies": [],
+  "options": {
+    "request": [
+      {
+        "name": "language",
+        "type": "string",
+        "description": "Whisper ISO-639 language for the transcription prompt (en/zh/ja/ko/...). Use `auto` for single-step language detection. Defaults to en.",
+        "required": false,
+        "default": "en"
+      },
+      {
+        "name": "max_tokens",
+        "type": "int",
+        "description": "Maximum generated tokens per utterance; zero uses a 64-token default.",
+        "required": false,
+        "min": 0,
+        "max": 448,
+        "default": 0
+      },
+      {
+        "name": "task",
+        "type": "enum",
+        "description": "transcribe (ASR) or translate (transcribe into the target language, Open AI Whisper semantics: English).",
+        "values": [
+          "transcribe",
+          "translate"
+        ],
+        "required": false,
+        "default": "transcribe"
+      },
+      {
+        "name": "timestamps",
+        "type": "bool",
+        "description": "Emit word/speech segments with timestamps (model outputs <|timestamp|> tokens within the 30s window).",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "beam_size",
+        "type": "int",
+        "description": "Beam search width. 0 or 1 => greedy KV-cache streaming; >=2 => beam search (per-candidate single-batch forward with per-beam KV state round-trip, no framework batch rewrite). May increase transcription quality at higher latency.",
+        "required": false,
+        "min": 0,
+        "max": 16,
+        "default": 0
+      },
+      {
+        "name": "repetition_penalty",
+        "type": "float",
+        "description": "Repetition penalty applied to the logits of already-generated tokens (OpenAI semantics: negative logit multiplied, positive divided). 1.0 (default) disables it; >1.0 suppresses degenerate repeats. Required for usable beam search (beam_size>=2 without it collapses into whole-sentence repetition). Values <=1.0 are clamped to 1.0.",
+        "required": false,
+        "min": 1.0,
+        "max": 2.0,
+        "default": 1.0
+      },
+      {
+        "name": "clip_offset_seconds",
+        "type": "float",
+        "description": "Global start offset (seconds) of the fed audio in the source timeline. When >0 and timestamps=true, inject a start-timestamp token (<|X.XX|>) into the decoder prompt so the model conditions on 'this fragment begins mid-stream' and suppresses boundary artifacts at chunk start. Must align with how long the audio snippet was cut from its source.",
+        "required": false,
+        "default": 0
+      },
+      {
+        "name": "clip_timestamps",
+        "type": "string",
+        "description": "OpenAI-style clip_timestamps [start,end] (seconds) as string, e.g. \"[125.4,155.4]\". The start value is used as the global start offset (see clip_offset_seconds); takes precedence when both are present. Mainly for R1/R2 jump-transcription passthrough.",
+        "required": false,
+        "default": ""
+      },
+      {
+        "name": "audio_chunk_mode",
+        "type": "enum",
+        "description": "Long-audio segmentation (framework contract): auto (default, quiet-energy), fixed (fixed window), vad (real Silero VAD split), none (no split). Old whisper-only values quiet_energy are still accepted and treated as auto.",
+        "values": [
+          "auto",
+          "fixed",
+          "quiet_energy",
+          "vad",
+          "none"
+        ],
+        "required": false,
+        "default": "auto"
+      }
+    ],
+    "session": [
+      {
+        "name": "vad_model_path",
+        "type": "string",
+        "description": "Path to the internal Silero VAD model directory used when audio_chunk_mode=vad (default: assets/framework/models/silero_vad). You can also pass the fully-prefixed key whisper.vad_model_path.",
+        "required": false,
+        "default": "assets/framework/models/silero_vad"
+      },
+      {
+        "name": "weight_context_mb",
+        "type": "int",
+        "description": "ggml weight context arena size in MiB; default 128. Overrides the compile-time kWeightContextBytes (was 128).",
+        "required": false,
+        "min": 1,
+        "default": 128
+      },
+      {
+        "name": "graph_arena_mb",
+        "type": "int",
+        "description": "ggml graph context arena size in MiB; default 64. Overrides the compile-time kGraphContextBytes (was 64).",
+        "required": false,
+        "min": 1,
+        "default": 64
+      },
+      {
+        "name": "cross_kv_precision",
+        "type": "string",
+        "description": "Cross-attention KV storage precision: f16/bf16/f32 (default f32).",
+        "required": false,
+        "default": "f32"
+      }
+    ],
+    "load": []
+  },
+  "runtime": {
+    "tags": [
+      "cpu",
+      "cuda",
+      "gguf"
+    ]
+  },
+  "ui": {
+    "tags": [
+      "ASR",
+      "GGUF"
+    ],
+    "docs": [
+      "docs/asr.md",
+      "docs/models/whisper.md"
+    ],
+    "recommended_package": "whisper_tiny_gguf_f16"
+  },
+  "package_defaults": {
+    "download": {
+      "kind": "unsupported",
+      "reason": "No packaged download yet. Convert locally with audiocpp_gguf (--family whisper) to a standalone F16 GGUF, or prepare a safetensors model dir with config.json + multilingual.tiktoken + model.safetensors (see docs/models/whisper.md)."
+    }
+  },
+  "packages": [
+    {
+      "id": "whisper_tiny_gguf_f16",
+      "display_name": "Whisper Tiny GGUF (F16)",
+      "default": true,
+      "format": "gguf",
+      "precision": "f16",
+      "target_directory": "Whisper-Tiny-GGUF",
+      "files": [
+        "Whisper-Tiny-GGUF/whisper-tiny-f16.gguf"
+      ],
+      "strip_prefix": "Whisper-Tiny-GGUF"
+    },
+    {
+      "id": "whisper_tiny_gguf_q8_0",
+      "display_name": "Whisper Tiny GGUF (Q8_0)",
+      "default": false,
+      "format": "gguf",
+      "precision": "q8_0",
+      "target_directory": "Whisper-Tiny-GGUF",
+      "files": [
+        "Whisper-Tiny-GGUF/whisper-tiny-q8_0.gguf"
+      ],
+      "strip_prefix": "Whisper-Tiny-GGUF"
+    },
+    {
+      "id": "whisper_tiny_safetensors",
+      "display_name": "Whisper Tiny Safetensors",
+      "default": false,
+      "format": "safetensors",
+      "precision": "f32",
+      "target_directory": "Whisper-Tiny-Safetensors",
+      "files": [
+        "Whisper-Tiny-Safetensors/model.safetensors"
+      ],
+      "strip_prefix": "Whisper-Tiny-Safetensors"
+    }
+  ],
+  "sources": [
+    {
+      "format": "gguf",
+      "roots": {
+        "model": ".",
+        "weights": "$gguf"
+      },
+      "files": {
+        "config": "model:config.json",
+        "tokenizer": "model:multilingual.tiktoken"
+      },
+      "tensors": {
+        "weights": "weights:"
+      }
+    },
+    {
+      "format": "safetensors",
+      "roots": {
+        "model": "."
+      },
+      "files": {
+        "config": "model:config.json",
+        "tokenizer": "model:multilingual.tiktoken"
+      },
+      "tensors": {
+        "weights": "model:model.safetensors"
+      }
+    }
+  ]
+}

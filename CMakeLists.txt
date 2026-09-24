@@ -1710,6 +1710,18 @@ audiocpp_add_model(citrinet_asr
         engine::models::citrinet_asr::make_citrinet_asr_loader
 )
 
+audiocpp_add_model(whisper
+    SOURCES
+        src/models/whisper/assets.cpp
+        src/models/whisper/runtime.cpp
+        src/models/whisper/session.cpp
+        src/models/whisper/tokenizer.cpp
+    INCLUDES
+        engine/models/whisper/session.h
+    LOADERS
+        engine::models::whisper::make_whisper_loader
+)
+
 audiocpp_add_model(granite5asr
     SOURCES
         src/community_models/granite5asr/assets.cpp
