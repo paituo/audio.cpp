@@ -36,6 +36,7 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace minitts::server {
 namespace {
@@ -985,6 +986,21 @@ engine::runtime::TaskRequest build_openai_transcription_request(
         // language still reaches the model through text_input either way.
         if (!language.empty() && accepts_language_option) {
             request.options["language"] = language;
+        }
+    }
+    // 跳转转录（R1）：接受顶层 clip_timestamps（[start,end] 秒数组或 string），
+    // 归一化为字符串写入带前缀的 whisper.clip_timestamps，由 whisper session 的
+    // clip_offset_from_options() 解析起始偏移（用于 R2 起始时间戳 token 注入 + 绝对时间对齐）。
+    // 缺省时完全回退当前行为（offset=0，不注入 token）。
+    if (const auto * value = body.find("clip_timestamps")) {
+        std::string clip_str;
+        if (value->is_string()) {
+            clip_str = value->as_string();
+        } else if (value->is_array()) {
+            clip_str = engine::io::json::stringify(*value);  // 保留 "[125.4,155.4]" 原样
+        }
+        if (!clip_str.empty()) {
+            request.options["whisper.clip_timestamps"] = std::move(clip_str);
         }
     }
     std::string context;
@@ -2667,8 +2683,10 @@ HttpResponse ServerState::handle_transcription_multipart(
     std::string model_id;
     std::string language;
     std::string prompt;
+    std::string clip_timestamps;
     std::optional<int> busy_timeout_ms;
     bool stream = false;
+    std::vector<std::string> unknown_fields;
     for (const auto & part : parts) {
         if (part.name == "file") {
             file_part = &part;
@@ -2697,6 +2715,35 @@ HttpResponse ServerState::handle_transcription_multipart(
                 stream = false;
             } else {
                 throw std::runtime_error("multipart transcription stream field must be true or false");
+            }
+        } else if (part.name == "clip_timestamps") {
+            // 跳转转录（R1）：multipart 版接收 [start,end] 秒数组字符串，经统一
+            // build_openai_transcription_request 归一化为 whisper.clip_timestamps。
+            clip_timestamps = part.data;
+        } else {
+            // 未识别的 multipart 字段。OpenAI multipart 契约只携带 file/model/language 等；
+            // task/beam_size/timestamps 这类「看似受支持、实为 JSON options 专用」的字段若在此
+            // 静默忽略，调用方会误以为已生效（可诊断性缺陷 P0-1）。收集起来统一处理。
+            unknown_fields.push_back(part.name);
+        }
+    }
+    // P0-1 可诊断性：对未识别字段给出显式反馈，而不是静默吞掉。
+    if (!unknown_fields.empty()) {
+        std::ostringstream unknown_log;
+        unknown_log << "[SERVER_TRANSCRIPTION_DEBUG] core.multipart.ignored_fields";
+        for (const auto & name : unknown_fields) {
+            unknown_log << " " << json_quote(name);
+        }
+        engine::debug::log_message(unknown_log.str());
+        // task / beam_size / timestamps 三个字段确有语料（CLI/JSON options 支持），
+        // 但 multipart 此处不支持 → 显式 400 并引导到 /v1/tasks/run + "options"。
+        for (const auto & name : unknown_fields) {
+            if (name == "task" || name == "beam_size" || name == "timestamps") {
+                return error_response(
+                    400,
+                    "multipart transcription does not support the '" + name +
+                    "' field; pass it via the JSON /v1/tasks/run route inside \"options\"",
+                    "invalid_request_error");
             }
         }
     }
@@ -2728,6 +2775,9 @@ HttpResponse ServerState::handle_transcription_multipart(
     }
     if (!prompt.empty()) {
         fields.emplace("text", engine::io::json::Value::make_string(prompt));
+    }
+    if (!clip_timestamps.empty()) {
+        fields.emplace("clip_timestamps", engine::io::json::Value::make_string(clip_timestamps));
     }
     const auto body = engine::io::json::Value::make_object(std::move(fields));
 
