@@ -59,6 +59,17 @@ function Add-PathFront {
     }
 }
 
+# 8.3 short path of a file/directory (used so nvcc's PATH cl matches the short-form -ccbin
+# path that CMake generates for deep/unusual toolset paths). Falls back to the input.
+function Get-ShortPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $out = (& cmd.exe /d /s /c "for %I in (`"$Path`") do @echo %~sI") 2>$null
+    if ($LASTEXITCODE -eq 0 -and $out -and $out -notmatch "%~sI" -and (Test-Path $out)) {
+        return $out.Trim()
+    }
+    return $Path
+}
+
 function Add-EnvListFront {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -624,9 +635,60 @@ if ($settings.CxxFlagsDebug -ne "") {
 }
 if ($isCudaPreset) {
     $configureArgs += "-DCUDAToolkit_ROOT=$(Convert-ToCMakePath $cudaRoot)"
-    $configureArgs += "-DCMAKE_CUDA_HOST_COMPILER=$(Convert-ToCMakePath $cl)"
-    $configureArgs += "-DCMAKE_CUDA_FLAGS=-Xcompiler=/utf-8"
+    # Pin the nvcc CMake uses to the root resolved from CUDA_PATH (Find-CudaRoot).
+    # Without this, CMake's FindCUDAToolkit may pick a *different* toolkit's nvcc
+    # (e.g. first nvcc on PATH / another installed version) than the CUDAToolkit_ROOT
+    # it found, which breaks compiling for Blackwell (sm_120). See 2026-09-21 build-debug.
+    $configureArgs += "-DCMAKE_CUDA_COMPILER=$(Convert-ToCMakePath (Join-Path $cudaRoot "bin\nvcc.exe"))"
+    # CUDA host compiler must be a toolset that nvcc's cudafe++ (EDG frontend) supports.
+    # CUDA 12.x officially supports MSVC 2017-2022 (19.00-19.3x). On machines whose default
+    # cl is newer (e.g. MSVC 19.51 / VS2026, like this one), nvcc re-runs vcvars64.bat for every
+    # .cu file and vcvars picks the LATEST toolset -> its preprocessed output makes cudafe++
+    # die with ACCESS_VIOLATION (0xC0000005). Pin the CUDA host compiler to a <=19.3x toolset
+    # and tell nvcc's nested vcvars run to use that same version via VCToolsVersion.
+    $msvcRoot = Split-Path ($cl.Substring(0, $cl.IndexOf('\bin\Hostx64')))
+    $cudaHostCl = ""
+    foreach ($ver in @("14.29.30133", "14.44.35207", "14.16.27023")) {
+        $cand = "$msvcRoot\$ver\bin\Hostx64\x64\cl.exe"
+        if (Test-Path $cand) { $cudaHostCl = $cand; break }
+    }
+    if ($cudaHostCl -ne "") {
+        $configureArgs += "-DCMAKE_CUDA_HOST_COMPILER=$(Convert-ToCMakePath (Get-ShortPath $cudaHostCl))"
+        # nvcc re-runs vcvars64.bat for every .cu and defaults to the NEWEST toolset (19.51 here),
+        # whose preprocessed output crashes cudafe++ (EDG frontend supports only <=19.3x).
+        # Mark "already inside a VS environment" so nvcc skips re-invoking vcvars64.bat, and pin
+        # the toolset version so any nested vcvars selects the supported 14.29 toolchain.
+        $env:VCINSTALLDIR = Join-Path $vsInstall "VC"
+        $env:VSCMD_ARG_VCINSTALLDIR = $vsInstall
+        $env:VCToolsVersion = $ver
+        # cudafe++ also parses the host preprocessor output, so the MSVC include/lib it sees must
+        # be the SAME supported toolset (14.29), not the newest 19.51 that Add-MsvcEnvironment's
+        # vcvars left in INCLUDE/LIB. Rebuild INCLUDE/LIB scoped to the pinned toolset + Windows Kits.
+        $toolsetRoot = $cudaHostCl.Substring(0, $cudaHostCl.IndexOf('\bin\Hostx64'))
+        if ($mt -match '^(.*Windows Kits\\10)\\bin\\([^\\]+)\\x64\\mt\.exe$') {
+            $kitRoot = $Matches[1]; $kitVers = $Matches[2]
+            $env:INCLUDE = "$toolsetRoot\include;$toolsetRoot\ATLMFC\include;$vsInstall\VC\Auxiliary\VS\include;$kitRoot\Include\$kitVers\ucrt;$kitRoot\Include\$kitVers\um;$kitRoot\Include\$kitVers\shared;$kitRoot\Include\$kitVers\winrt"
+            $env:LIB = "$toolsetRoot\lib\x64;$kitRoot\Lib\$kitVers\ucrt\x64;$kitRoot\Lib\$kitVers\um\x64"
+        }
+    } else {
+        $configureArgs += "-DCMAKE_CUDA_HOST_COMPILER=$(Convert-ToCMakePath $cl)"
+    }
+    $configureArgs += "-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -Xcompiler=/utf-8 --use-local-env"
     $configureArgs += "-DOpenMP_CUDA_FLAGS=/openmp:experimental"
+    # CUDAHOSTCXX + --use-local-env: when the host CXX env is already declared nvcc uses the
+    # local process env (14.29 INCLUDE/PATH) instead of re-running vcvars64.bat for every .cu.
+    # The re-run was picking the NEWEST toolset (14.51) whose headers crash cudafe++ (EDG,
+    # supports only <=19.3x). See 2026-09-21 build-debug.
+    if ($cudaHostCl -ne "") {
+        $env:CUDAHOSTCXX = (Get-ShortPath $cudaHostCl)
+        # --use-local-env also makes nvcc compare the cl found first on PATH against -ccbin.
+        # If the default (C/CXX) msvcRoot 14.51 is still in front, nvcc aborts with
+        # "cl.exe in PATH is different than one specified with -ccbin". Put the pinned
+        # 14.29 Hostx64\x64 ahead so PATH cl == -ccbin cl. Use the 8.3 SHORT path because
+        # CMake emits -ccbin in short form (C:\PROGRA~1\...) for this deep VS path, while
+        # nvcc reports the PATH cl in long form -> it would still call them "different".
+        Add-PathFront (Get-ShortPath (Join-Path $toolsetRoot "bin\Hostx64\x64"))
+    }
 }
 if ($isCudaPreset -and $arch -ne "") {
     $configureArgs += "-DCMAKE_CUDA_ARCHITECTURES=$arch"
