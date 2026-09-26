@@ -14,7 +14,7 @@ native-batch, and continuous streaming inference.
 | Modes | `offline`, `streaming` |
 | Input | 16 kHz WAV audio |
 | Output | Speaker turns through `--turns-out` |
-| Weights | BF16 GGUF |
+| Weights | BF16 GGUF (default), Q8_0 GGUF |
 
 The checkpoint is distributed under [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
 GGUF weights are packaged in [Nemotron-3-Diarization-GGUF](https://huggingface.co/audio-cpp/Nemotron-3-Diarization-GGUF).
@@ -91,6 +91,15 @@ All geometry values use 80 ms encoder frames. Input-buffer latency is
 | `low` | 1.04 s | 264 | 264 | 9 | 4 | 222 |
 | `very_low` | 0.64 s | 264 | 264 | 6 | 2 | 222 |
 | `ultra_low` | 0.32 s | 264 | 264 | 3 | 1 | 222 |
+| `asr_la13` | 1.12 s | 264 | 264 | 14 | 0 | 222 |
+| `asr_la6` | 0.56 s | 264 | 264 | 7 | 0 | 222 |
+| `asr_la3` | 0.32 s | 264 | 264 | 4 | 0 | 222 |
+| `asr_la0` | 0.08 s | 264 | 264 | 1 | 0 | 222 |
+
+The `asr_laN` profiles match `nemotron_asr` speaker masking at ASR lookahead
+*N*: one ASR chunk of *N* + 1 frames per step and no right context, as in
+NeMo's multitalker pipeline.
+`asr_la0` processes one 80 ms frame per step and is slow.
 
 Use `custom` to set the five geometry controls directly.
 
@@ -112,6 +121,7 @@ Use these with `--request-option`.
 | `speaker_threshold` | `0.0` to `1.0` | `0.5` | Speaker activity threshold. |
 | `speaker_min_frames` | integer >= 0 | `0` | Minimum turn duration in 10 ms output frames. |
 | `speaker_pad_frames` | integer >= 0 | `0` | Padding around turns in 10 ms output frames. |
+| `return_frame_probabilities` | `true`, `false` | `false` | Attach the raw 10 ms speaker-activity timeline as the `speaker_probabilities` artifact. With `--out-dir`, the CLI writes `speaker_probabilities.safetensors`. It holds one F32 tensor `speaker_probabilities` `[frames, 8]` and string metadata: `format_version`, `source_family`, `frames`, `speakers`, `frame_hop_samples`, `sample_rate`, `latency_profile`, and the five geometry values. |
 
 ## Session Options
 
@@ -119,7 +129,7 @@ Use these with `--session-option nemotron_3_diar.<name>=<value>`.
 
 | Option | Value | Default | Description |
 |---|---|---:|---|
-| `latency_profile` | `very_high`, `low`, `very_low`, `ultra_low`, `custom` | `very_high` | Streaming geometry preset. |
+| `latency_profile` | `very_high`, `low`, `very_low`, `ultra_low`, `asr_la0`, `asr_la3`, `asr_la6`, `asr_la13`, `custom` | `very_high` | Streaming geometry preset. |
 | `spkcache_len` | integer >= 16 | checkpoint value | Speaker-cache length for `custom`. |
 | `fifo_len` | integer >= 0 | checkpoint value | FIFO length for `custom`. |
 | `chunk_len` | integer >= 1 | checkpoint value | Processing chunk length for `custom`. |
@@ -128,3 +138,36 @@ Use these with `--session-option nemotron_3_diar.<name>=<value>`.
 | `graph_arena_mb` | integer >= 1 | `1024` | GGML graph metadata arena size. |
 | `weight_context_mb` | integer >= 1 | `1024` | GGML weight metadata arena size. |
 | `weight_type` | storage type | `native` | Runtime weight storage type. |
+| `attention` | `auto`, `flash`, `eager` | `auto` | Encoder attention lowering. `auto` uses flash attention on GPUs that support it and eager attention on others, such as Volta and Turing. |
+
+## Validation
+
+The output was compared with NeMo Python (`SortformerEncLabelModel.forward_streaming`,
+FP32, CPU, NVIDIA-NeMo/Speech `cf724ac`) and with NVIDIA's C++ port
+(NeMo-Speech.cpp `8c15060`), using the same `.nemo` checkpoint
+(SHA-256 `867c53f5...`). All numbers use the native 10 ms speaker
+probabilities.
+
+| Case | Build | Max \|Δ\| vs NeMo | Mean \|Δ\| | Frame flips at 0.5 |
+|---|---|---:|---:|---:|
+| AMI EN2002d 20 s (319,990 samples), `very_high` | CPU, F32 weights | 8.7e-4 | 2.1e-5 | 0 |
+| AMI EN2002d 20 s (319,990 samples), `low` | CPU, F32 weights | 1.6e-3 | 2.6e-5 | 1 |
+| Same clip, NVIDIA C++ port, `very_high` | CPU, F32 | 1.1e-1 | 9.4e-4 | 2 |
+
+The model is sensitive to tiny input changes in long streams. On a 120 s
+meeting with the `low` profile, adding inaudible noise (σ = 1e-5) to the
+input changes the NeMo output by 1.1% DER-equivalent and this port's output
+by 3.2%. This port and NeMo differ by 3.6–4.2% on the same file, which is the
+same order. NVIDIA's C++ port shows the same difference. Against NeMo on that
+file, every build falls in one band: CPU F32 4.2%, CUDA F32 4.4%, CUDA BF16
+5.1%, and CUDA Q8_0 4.3%. Q8_0 therefore shows no quality cliff.
+
+On CUDA, flash attention converts K and V to F16. Compared with the CPU F32
+output, eager attention reduces the difference from 74 to 2 flipped frames
+on the 120 s stream and costs about 35% more time (900 s of audio in 16.8 s
+instead of 12.5 s on an RTX 4070 Ti SUPER). The default stays `auto`.
+
+Known deviation: NeMo pads mel features to a multiple of 16 frames, and
+its subpixel convolution reads those padded rows at the last real 80 ms
+frame. This port uses zero padding there, so the final 70 ms of a file can
+differ by up to 0.02.

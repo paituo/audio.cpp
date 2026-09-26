@@ -151,13 +151,18 @@ void MossTtsV15Session::prepare(const runtime::SessionPreparationRequest &) {
     codebook_spec.tensor_prefix = "emb_ext";
     codebooks_ = std::make_unique<engine::modules::MultiCodebookEmbedding>(*assets_->model_weights, codebook_spec);
 
+    const auto backend_type = execution_context().backend_type();
+    const bool use_f16 = backend_type == core::BackendType::Cuda ||
+                         backend_type == core::BackendType::Vulkan ||
+                         backend_type == core::BackendType::Metal;
     backbone_ = std::make_unique<decoders::MossTtsDelayBackboneRuntime>(
         assets_->config,
         assets_->model_weights,
         execution_context(),
         backbone_graph_arena_bytes_,
         backbone_weight_context_bytes_,
-        weight_storage_type_);
+        weight_storage_type_,
+        use_f16 ? GGML_TYPE_F16 : GGML_TYPE_F32);
     heads_ = std::make_unique<decoders::MossTtsDelayHeadsRuntime>(
         assets_->config,
         assets_->model_weights,
@@ -174,6 +179,7 @@ void MossTtsV15Session::prepare(const runtime::SessionPreparationRequest &) {
             codec_graph_arena_bytes_,
             codec_graph_arena_bytes_,
             false,
+            use_f16 ? assets::TensorStorageType::F16 : assets::TensorStorageType::F32,
         },
         engine::codecs::moss_audio_tokenizer_v1_config());
     codec_->prepare_decoder();
@@ -304,6 +310,9 @@ std::vector<float> MossTtsV15Session::decode_codes(const GeneratedChunk & chunk)
 runtime::TaskResult MossTtsV15Session::run(const runtime::TaskRequest & request) {
     require_prepared("MOSS-TTS-v1.5 run()");
     const auto wall_start = Clock::now();
+    // Counters accumulate across calls, so without this a second request in the same
+    // session reports the first one's time as well.
+    backbone_->reset_timing();
     if (!request.text_input.has_value() || request.text_input->text.empty()) {
         throw std::runtime_error("MOSS-TTS-v1.5 requires text to speak");
     }
@@ -414,6 +423,10 @@ runtime::TaskResult MossTtsV15Session::run(const runtime::TaskRequest & request)
 
     debug::trace_log_scalar("moss_tts_v15.chunk_count", static_cast<int64_t>(chunk_requests.size()));
     debug::trace_log_scalar("moss_tts_v15.silent_chunks", silent_chunks);
+    // The backbone already counts its own prefill/step stages; nothing in the delay family
+    // ever asked it to report them, so the instrumentation was dead. Same pair of calls
+    // moss_tts_local makes (generator.cpp:265 resets, :401 reports).
+    backbone_->log_timing();
     debug::timing_log_scalar("session.wall_ms", engine::debug::elapsed_ms(wall_start, Clock::now()));
 
     if (merged.samples.empty()) {

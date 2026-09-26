@@ -47,18 +47,29 @@
         "required": false,
         "min": 0,
         "default": 0
+      },
+      {
+        "name": "return_frame_probabilities",
+        "type": "bool",
+        "description": "Attach the raw 10 ms speaker-activity timeline as the speaker_probabilities.safetensors artifact (F32 [frames, speakers] plus streaming-geometry metadata), the input for nemotron_asr speaker tagging.",
+        "required": false,
+        "default": false
       }
     ],
     "session": [
       {
         "name": "latency_profile",
         "type": "enum",
-        "description": "Official streaming latency profile.",
+        "description": "Streaming latency profile: the official very_high, low, very_low and ultra_low presets, asr_la0/3/6/13 for nemotron_asr speaker masking at that ASR lookahead, or custom.",
         "values": [
           "very_high",
           "low",
           "very_low",
           "ultra_low",
+          "asr_la0",
+          "asr_la3",
+          "asr_la6",
+          "asr_la13",
           "custom"
         ],
         "required": false,
@@ -98,6 +109,14 @@
         "description": "FIFO-to-cache update period in 80 ms encoder frames for the custom profile.",
         "required": false,
         "min": 1
+      },
+      {
+        "name": "attention",
+        "type": "enum",
+        "values": ["auto", "flash", "eager"],
+        "description": "Encoder attention lowering; auto uses flash attention where the backend supports it.",
+        "required": false,
+        "default": "auto"
       },
       {
         "name": "graph_arena_mb",
@@ -163,6 +182,16 @@
       "target_directory": "Nemotron-3-Diarization-GGUF",
       "files": [
         "nemotron-3-diarization-bf16.gguf"
+      ]
+    },
+    {
+      "id": "nemotron_3_diar_q8_0",
+      "display_name": "Nemotron 3 Diarization Q8_0 GGUF",
+      "format": "gguf",
+      "precision": "q8_0",
+      "target_directory": "Nemotron-3-Diarization-GGUF",
+      "files": [
+        "nemotron-3-diarization-q8_0.gguf"
       ]
     }
   ],

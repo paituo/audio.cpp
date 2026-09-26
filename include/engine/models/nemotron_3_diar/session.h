@@ -87,6 +87,7 @@ private:
     std::unique_ptr<PreEncodeGraph> pre_encode_graph_;
     std::unique_ptr<EncoderGraph> encoder_graph_;
     StreamingConfig streaming_config_;
+    std::string latency_profile_;
     std::unique_ptr<StreamScheduler> stream_scheduler_;
     std::unique_ptr<AoscState> stream_state_;
     runtime::TaskRequest stream_request_;
@@ -97,6 +98,7 @@ private:
     bool stream_started_ = false;
     size_t graph_arena_bytes_ = 1024ull * 1024ull * 1024ull;
     size_t weight_context_bytes_ = 1024ull * 1024ull * 1024ull;
+    bool use_flash_attention_ = true;
 };
 
 }  // namespace engine::models::nemotron_3_diar

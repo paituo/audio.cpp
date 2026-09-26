@@ -177,7 +177,7 @@ Community model ports live under `community_models` to make the ownership bounda
 | **echo_tts** | Clone | en | GGUF 16/Q8 | [@5uck1ess](https://github.com/5uck1ess) | [Echo-TTS](docs/community_models/echo_tts.md) 44.1 kHz zero-shot voice cloning with EchoDiT latents and Fish S1-DAC decoding |
 | **f5_tts** | TTS, Clone | en, ar (Habibi) | GGUF | [@tareko](https://github.com/tareko) | [F5-TTS](docs/community_models/f5_tts.md) flow-matching DiT synthesis and voice cloning, with Habibi Arabic aliases `habibi`/`habibi_tts` |
 | **glm_tts** | TTS, Clone | zh, en | GGUF | Mirek [@mirek190](https://github.com/mirek190) | [GLM-TTS](docs/community_models/glm_tts.md) zero-shot synthesis and voice cloning support |
-| **zipvoice** | TTS, Clone | zh, en | GGUF F32 | Community | [ZipVoice](docs/community_models/zipvoice.md) k2-fsa TTSZipformer flow-matching zero-shot voice cloning with Vocos vocoder; jieba + pypinyin Chinese frontend |
+| **zipvoice** | TTS, Clone | zh, en | GGUF F32, Stream | Community | [ZipVoice](docs/community_models/zipvoice.md) k2-fsa TTSZipformer flow-matching zero-shot voice cloning with Vocos vocoder; jieba + pypinyin Chinese frontend; chunk streaming |
 | **granite5asr** | ASR | en | GGUF Q8 | [@ampersandru](https://github.com/ampersandru) | [IBM Granite Speech 5.0 470M TurboCTC](docs/community_models/granite5asr.md) ultra-fast Conformer-CTC ASR with Shaw relative positional embeddings and ByteLevel BPE |
 | **inflect_v2** | TTS | en | GGUF FP32 | Jan [@JanWerder](https://github.com/JanWerder) | [Inflect Micro v2 and Nano v2](docs/community_models/inflect_v2.md) native offline synthesis |
 | **kroko_asr** | ASR | de, en, es, fr, it, he, nl, pt, sv, tr | Safetensors, GGUF Q8 | Mirek [@mirek190](https://github.com/mirek190) | [Kroko Community ASR](docs/community_models/kroko_asr.md) native offline/streaming Zipformer2/RNN-T transcription with word timestamps |
@@ -848,6 +848,7 @@ Have a project using audio.cpp? Submit a PR or let me know, and I’ll be happy 
 - [AudioCpp.NET](https://github.com/dongfangzhizhu/AudioCpp.NET) provides .NET 10 bindings for audio.cpp behind a small versioned C ABI shim, shipped as managed, CPU runtime, and CUDA runtime NuGet packages for Windows and Linux.
 - [yovoice](https://github.com/leemysw/yovoice) is a desktop voiceover app for macOS and Windows, built on audio.cpp with support for local text-to-speech, voice cloning, and emotion control.
 - [AudioCpp-Bindings](https://github.com/christopherthompson81/AudioCpp-Bindings) provides .NET bindings over the C ABI merged in #530, an Avalonia desktop app for Linux, macOS and Windows that mirrors the web UI's seven workflows and model manager (with its interface strings imported from the web UI's own language files, so the two read alike in English, Italian, Polish, Russian and Simplified Chinese), and a C# reimplementation of the HTTP API that an existing client can be pointed at unchanged.
+- [Remiqora](https://github.com/inikolax/remiqora) is an open-source (MIT) local music studio for Windows, macOS and Linux that runs YuE2-3B on audio.cpp's native server (plus MuScriptor for audio-to-MIDI) next to ACE-Step 1.5, swapping the two engines on a single GPU. It adds one-click Demucs stem splitting, a browser multitrack editor with an effects rack and WAV/MP3 export, and a LoRA training UI.
 
 
 ## Performance Metrics
