@@ -61,7 +61,7 @@ dependency detection.
 cat > server.json <<'JSON'
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 1,
@@ -187,7 +187,7 @@ For streaming endpoints, configure the model with `"mode": "streaming"` and use 
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 1,
@@ -315,7 +315,7 @@ Returns OpenAI-style model entries for the configured audio.cpp model ids.
 OpenAI-style text-to-audio. The response is `audio/wav` by default.
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/speech \
+curl http://127.0.0.1:28670/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -o out.wav \
   -d '{
@@ -341,7 +341,7 @@ If no request voice is provided and the configured model has `default_voice_pres
 With `"type": "base64"`, the `data` field carries a base64-encoded WAV payload (a `data:audio/wav;base64,...` URI is also accepted), so cloning clients can inline the reference audio instead of staging a file on the server first. The decoded payload is limited to 5 MiB; larger references must use a path:
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/speech \
+curl http://127.0.0.1:28670/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -o out.wav \
   -d '{
@@ -357,7 +357,7 @@ Set `"response_format": "json"` to receive base64 WAV in a JSON response. In bui
 For streaming-capable TTS models configured with `mode: "streaming"`, `stream_format` follows the OpenAI speech streaming shape:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/audio/speech \
+curl -N http://127.0.0.1:28670/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -H 'Accept: text/event-stream' \
   -d '{
@@ -380,7 +380,7 @@ The SSE stream emits `speech.audio.delta` events with base64 PCM chunks, then `s
 JSON transcription request using a server-local WAV audio path.
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/transcriptions \
+curl http://127.0.0.1:28670/v1/audio/transcriptions \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "qwen3-asr",
@@ -391,7 +391,7 @@ curl http://127.0.0.1:8080/v1/audio/transcriptions \
 Also accepts a `multipart/form-data` upload, matching the OpenAI Whisper API convention used by real clients (e.g. Open WebUI). The request is routed to the multipart path based on the `Content-Type` header; the JSON path above still works unchanged.
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/transcriptions \
+curl http://127.0.0.1:28670/v1/audio/transcriptions \
   -F model=qwen3-asr \
   -F language=en \
   -F file=@/path/to/input.wav
@@ -402,7 +402,7 @@ curl http://127.0.0.1:8080/v1/audio/transcriptions \
 For streaming-capable ASR models configured with `mode: "streaming"`, pass `stream=true` to receive OpenAI-style transcription SSE:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/audio/transcriptions \
+curl -N http://127.0.0.1:28670/v1/audio/transcriptions \
   -F model=nemotron-stream \
   -F language=en-US \
   -F stream=true \
@@ -420,7 +420,7 @@ Same request as `POST /v1/audio/transcriptions` — JSON with a server-local pat
 `/v1/audio/transcriptions` returns `text` and `timing` and nothing else, so a model that aligned every word or separated speakers has that work discarded on the way out. This route returns those fields instead. The response schema of the plain route is unchanged; existing clients see exactly what they see today.
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/transcriptions/details \
+curl http://127.0.0.1:28670/v1/audio/transcriptions/details \
   -F model=parakeet-tdt \
   -F file=@/path/to/input.wav
 ```
@@ -461,7 +461,7 @@ silently running each file separately.
 Supply `file` more than once in one multipart request:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/batches/transcriptions \
+curl -N http://127.0.0.1:28670/v1/batches/transcriptions \
   -F model=nemotron-3-diar \
   -F file=@/path/to/meeting-a.wav \
   -F file=@/path/to/meeting-b.wav
@@ -488,7 +488,7 @@ data: [DONE]
 Multipart forced-alignment request using uploaded audio bytes and a known transcript. Use this when the server cannot see the client's local audio path, for example when the server is remote or running in Docker.
 
 ```bash
-curl http://127.0.0.1:8080/v1/audio/alignments \
+curl http://127.0.0.1:28670/v1/audio/alignments \
   -F model=qwen3-align \
   -F language=en \
   -F text='The task has completed successfully.' \
@@ -519,7 +519,7 @@ Because the body carries audio rather than JSON, parameters are query parameters
 # Microphone straight into transcription (macOS; -f alsa on Linux, -f dshow on Windows)
 ffmpeg -f avfoundation -i ":0" -ar 16000 -ac 1 -f s16le - \
   | curl -N -X POST -H 'Expect:' -T - \
-      'http://127.0.0.1:8080/v1/audio/transcriptions/live?model=voxtral-realtime&sample_rate=16000&channels=1&sample_format=s16le'
+      'http://127.0.0.1:28670/v1/audio/transcriptions/live?model=voxtral-realtime&sample_rate=16000&channels=1&sample_format=s16le'
 ```
 
 `-T -` is what makes this live, and it is not interchangeable with `--data-binary @-`: the latter drains stdin to completion before opening the connection, which turns a live capture back into a file upload and defeats the endpoint. `-H 'Expect:'` suppresses curl's `Expect: 100-continue`, which the server does not answer — without it curl waits out its one-second continue timeout before sending any audio. (`-T .` reads stdin non-blocking; measured against this endpoint it behaves the same, so either works.)
@@ -592,7 +592,7 @@ A browser cannot drive it: `fetch()` request streaming requires HTTP/2 and is ha
 Lists the cached voice ids, configured server voice preset names, and voice-library (`voice_dir`) wav names available for a TTS model, so a client can populate a voice picker instead of guessing generic names. For families that keep voice presets under `model_root/embeddings/*.safetensors` (`pocket_tts` today), this returns those ids too. If `model` is omitted and the server has exactly one configured model, that model is used; if multiple models are configured, omit `model` only when an empty list is acceptable.
 
 ```bash
-curl 'http://127.0.0.1:8080/v1/audio/voices?model=pocket-tts'
+curl 'http://127.0.0.1:28670/v1/audio/voices?model=pocket-tts'
 ```
 
 ```json
@@ -604,7 +604,7 @@ curl 'http://127.0.0.1:8080/v1/audio/voices?model=pocket-tts'
 Generic framework request route. The `request` object uses the same JSON fields as the `audiocpp_cli` request sequence format.
 
 ```bash
-curl http://127.0.0.1:8080/v1/tasks/run \
+curl http://127.0.0.1:28670/v1/tasks/run \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "pocket-tts",
@@ -624,7 +624,7 @@ Unload specific models from memory to free resources (e.g. VRAM on GPU backends)
 The request body must contain a `model_ids` array of strings. Unknown ids are reported in the response rather than causing an error. Models that are not yet loaded (e.g. lazy-loaded models that have not been requested yet) are skipped silently.
 
 ```bash
-curl http://127.0.0.1:8080/v1/tasks/unload_models \
+curl http://127.0.0.1:28670/v1/tasks/unload_models \
   -H 'Content-Type: application/json' \
   -d '{
     "model_ids": ["pocket-tts", "qwen3-asr"]
@@ -645,7 +645,7 @@ Response:
 Unload all currently loaded models from memory. No request body is required. As with the selective endpoint, subsequent requests will reload models transparently.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/v1/tasks/unload_all_models
+curl -X POST http://127.0.0.1:28670/v1/tasks/unload_all_models
 ```
 
 Response:

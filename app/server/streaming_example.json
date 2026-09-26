@@ -1,6 +1,6 @@
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 1,

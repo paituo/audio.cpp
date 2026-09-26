@@ -22,7 +22,7 @@ cmake --build build --target audiocpp_server
 ./build/bin/audiocpp_server --ui --ui-management --backend <backend>
 ```
 
-Open **http://127.0.0.1:8080**. `--ui-management` enables on-demand model loading,
+Open **http://127.0.0.1:28670**. `--ui-management` enables on-demand model loading,
 unloading, package management, and temporary browser uploads. Models default to a `models/` directory
 beside the server executable. The Models page can select and remember a different directory.
 
@@ -85,7 +85,7 @@ npm run build
 
 The build creates `webui/native/dist/index.html`. CMake converts that single-file application into an
 embedded byte array for `audiocpp_server`; rebuild the server after changing it. For live development,
-run `npm run dev`; Vite proxies `/health` and `/v1` to a server on port 8080.
+run `npm run dev`; Vite proxies `/health` and `/v1` to a server on port 28670.
 
 The frontend consumes:
 

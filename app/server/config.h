@@ -66,7 +66,7 @@ struct ServerModelConfig {
 
 struct ServerConfig {
     std::string host = "127.0.0.1";
-    int port = 8080;
+    int port = 28670;
     std::string cors_origins = "";
     bool ui_enabled = true;
     bool ui_management = false;

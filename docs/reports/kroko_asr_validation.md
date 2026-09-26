@@ -375,7 +375,7 @@ Server configuration:
 ```json
 {
   "host": "127.0.0.1",
-  "port": 18080,
+  "port": 128670,
   "backend": "cuda",
   "models": [{
     "id": "kroko-sv-stream",
@@ -391,7 +391,7 @@ Server configuration:
 build\windows-cuda-release\bin\audiocpp_server.exe `
   --config ..\outputs\kroko_server_test.json --log
 
-curl.exe -N http://127.0.0.1:18080/v1/audio/transcriptions `
+curl.exe -N http://127.0.0.1:128670/v1/audio/transcriptions `
   -F "file=@../outputs/kroko_multilingual_samples/sv.wav" `
   -F "model=kroko-sv-stream" -F "language=sv" `
   -F "stream=true" -F "response_format=json"

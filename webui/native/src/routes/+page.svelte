@@ -186,7 +186,7 @@
   }
 
   async function clearLegacyUiCaches() {
-    // This server commonly reuses localhost:8080. Remove workers and Cache
+    // This server commonly reuses localhost:28670. Remove workers and Cache
     // Storage left by an older application on that origin before Native Studio
     // starts making requests. Do not clear localStorage or IndexedDB: they hold
     // saved voices, model-folder selection, and UI preferences.

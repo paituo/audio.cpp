@@ -102,7 +102,7 @@ audiocpp_cli --task asr --family fun_asr_nano \
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 4,
@@ -122,7 +122,7 @@ audiocpp_cli --task asr --family fun_asr_nano \
 ```bash
 audiocpp_server --config server.json
 
-curl http://127.0.0.1:8080/v1/audio/transcriptions \
+curl http://127.0.0.1:28670/v1/audio/transcriptions \
   -F model=fun-asr-nano \
   -F language=auto \
   -F file=@speech.wav

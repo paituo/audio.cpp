@@ -147,11 +147,11 @@ audiocpp_server --backend cpu \
   --config <(echo '{"models":[{"id":"sense_asr","family":"sense_asr","path":"models/SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf","task":"asr","mode":"streaming"}],"ui":false}')
 
 # Offline transcription
-curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+curl -X POST http://127.0.0.1:28670/v1/audio/transcriptions \
   -F 'model=sense_asr' -F 'file=@assets/resources/3.wav'
 
 # Streaming transcription (SSE)
-curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions/live \
+curl -X POST http://127.0.0.1:28670/v1/audio/transcriptions/live \
   -H 'Accept: text/event-stream' \
   -H 'Transfer-Encoding: chunked' \
   -F 'model=sense_asr' -F 'file=@assets/resources/3.wav'
@@ -164,7 +164,7 @@ curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions/live \
 | C++ loader registered | `./build/sense/bin/audiocpp_cli --list-loaders` | `sense_asr: asr (offline\|streaming)` ✅ |
 | Offline CLI transcription | `audiocpp_cli --task asr --family sense_asr --model ... --audio librispeech.wav` | `text_output=Concord returned to its place, amidst the tents.` ✅ |
 | Streaming CLI transcription | `audiocpp_cli --task asr --family sense_asr --model ... --mode streaming --audio librispeech.wav` | `partial_text=...` then `text_output=Concord returned to its place amidst the tents.` ✅ |
-| Server /v1/models endpoint | `curl http://127.0.0.1:8080/v1/models` | Model listed with `loaded: true`, `mode: "streaming"` ✅ |
+| Server /v1/models endpoint | `curl http://127.0.0.1:28670/v1/models` | Model listed with `loaded: true`, `mode: "streaming"` ✅ |
 | Server offline transcription | `curl -F 'model=sense_asr' -F 'file=@3.wav' /v1/audio/transcriptions` | Returns transcript with timing (RTF ~0.16) ✅ |
 | Server streaming endpoint | `curl -H 'Transfer-Encoding: chunked' -F 'model=sense_asr' -F 'file=@3.wav' /v1/audio/transcriptions/live` | Returns `400: live transcription requires chunked body` (expected - client must stream) ✅ |
 | WebUI catalog entry | `models_catalog.json` | Entry `sense-asr` with `family: sense_asr` ✅ |

@@ -163,7 +163,7 @@ Native WebUI (no Python required):
 .\audiocpp_server.exe --ui --ui-management --backend cuda
 ```
 
-Then open `http://127.0.0.1:8080`.
+Then open `http://127.0.0.1:28670`.
 
 Inference and the WebUI do not require Python. The optional **Install / prepare**
 button uses the bundled `tools\model_manager_v2.py` for normal downloads and
@@ -217,7 +217,7 @@ Native WebUI (no Python required):
 .\audiocpp_server.exe --ui --ui-management --backend cpu
 ```
 
-Then open `http://127.0.0.1:8080`.
+Then open `http://127.0.0.1:28670`.
 
 Inference and the WebUI do not require Python. The optional **Install / prepare**
 button uses the bundled `tools\model_manager_v2.py` for normal downloads and

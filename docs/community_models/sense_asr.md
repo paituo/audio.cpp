@@ -77,7 +77,7 @@ audiocpp_server --ui --backend cpu \
   --config <(echo '{"models":[{"id":"sense_asr","family":"sense_asr","path":"models/SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf","task":"asr","mode":"streaming"}]}')
 ```
 
-Then open http://127.0.0.1:8080 and select "SenseVoice-Small (asr, 流式, 社区)" from the ASR tab.
+Then open http://127.0.0.1:28670 and select "SenseVoice-Small (asr, 流式, 社区)" from the ASR tab.
 
 Or load the model dynamically via the WebUI's model manager (click "📥 加载模型" after selecting the model).
 
@@ -92,11 +92,11 @@ Then use the OpenAI-compatible endpoint:
 
 ```bash
 # Offline transcription
-curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions \
+curl -X POST http://127.0.0.1:28670/v1/audio/transcriptions \
   -F 'model=sense_asr' -F 'file=@assets/resources/3.wav'
 
 # Streaming transcription (SSE) — requires chunked transfer encoding
-curl -X POST http://127.0.0.1:8080/v1/audio/transcriptions/live \
+curl -X POST http://127.0.0.1:28670/v1/audio/transcriptions/live \
   -H 'Accept: text/event-stream' \
   -H 'Transfer-Encoding: chunked' \
   -F 'model=sense_asr' -F 'file=@assets/resources/3.wav'

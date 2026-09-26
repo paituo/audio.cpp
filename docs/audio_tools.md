@@ -92,7 +92,7 @@ configuration file, not the server's working directory.
 Server request example:
 
 ```bash
-curl http://127.0.0.1:8080/v1/tasks/run \
+curl http://127.0.0.1:28670/v1/tasks/run \
   -H 'Content-Type: application/json' \
   -d '{"model":"builtin-rnnoise","request":{"audio":"input.wav"}}'
 ```

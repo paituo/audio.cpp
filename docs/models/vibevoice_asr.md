@@ -178,7 +178,7 @@ Server config for live streaming:
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "threads": 8,
   "models": [
@@ -208,7 +208,7 @@ ffmpeg -hide_banner -loglevel error -i input.wav -f s16le -ac 1 -ar 16000 - \
       -H 'Transfer-Encoding: chunked' \
       -H 'Expect:' \
       -T - \
-      'http://127.0.0.1:8080/v1/audio/transcriptions/live?model=vibevoice-streaming-7b&sample_rate=16000&channels=1&sample_format=s16le'
+      'http://127.0.0.1:28670/v1/audio/transcriptions/live?model=vibevoice-streaming-7b&sample_rate=16000&channels=1&sample_format=s16le'
 ```
 
 ### Common Options (use directly)

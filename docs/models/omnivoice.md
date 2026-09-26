@@ -55,7 +55,7 @@ Configure OmniVoice with `mode: "streaming"`:
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 8,
@@ -74,7 +74,7 @@ Configure OmniVoice with `mode: "streaming"`:
 SSE request:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/audio/speech \
+curl -N http://127.0.0.1:28670/v1/audio/speech \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
   -d '{

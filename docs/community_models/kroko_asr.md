@@ -191,7 +191,7 @@ Configure either mode. This example exposes streaming SSE:
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "models": [
     {
@@ -208,7 +208,7 @@ Configure either mode. This example exposes streaming SSE:
 ```powershell
 .\build\windows-cuda-release\bin\audiocpp_server.exe --config .\server.json --log
 
-curl.exe -N http://127.0.0.1:8080/v1/audio/transcriptions `
+curl.exe -N http://127.0.0.1:28670/v1/audio/transcriptions `
   -F "file=@speech_sv.wav" -F "model=kroko-sv-stream" `
   -F "language=sv" -F "stream=true" -F "response_format=json"
 ```
@@ -229,7 +229,7 @@ $body = @{
 } | ConvertTo-Json -Depth 4
 
 Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8080/v1/audio/transcriptions `
+  -Uri http://127.0.0.1:28670/v1/audio/transcriptions `
   -ContentType application/json -Body $body
 ```
 

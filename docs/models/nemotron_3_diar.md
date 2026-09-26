@@ -49,7 +49,7 @@ audiocpp_cli --task diar \
 The server exposes native batch inference through repeated multipart files:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/batches/transcriptions \
+curl -N http://127.0.0.1:28670/v1/batches/transcriptions \
   -F model=nemotron-3-diar \
   -F file=@/path/to/meeting-a.wav \
   -F file=@/path/to/meeting-b.wav

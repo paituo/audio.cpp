@@ -110,7 +110,7 @@ parameters and examples.
 ```bash
 ffmpeg -f alsa -i default -ar 16000 -ac 1 -f s16le - \
   | curl -N -X POST -H 'Expect:' -T - \
-      'http://127.0.0.1:8080/v1/audio/transcriptions/live?model=voxtral-realtime'
+      'http://127.0.0.1:28670/v1/audio/transcriptions/live?model=voxtral-realtime'
 ```
 
 Use `-T -`, not `--data-binary @-`: the latter reads stdin to EOF before it
@@ -154,7 +154,7 @@ Streaming server config:
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "backend": "cuda",
   "device": 0,
   "threads": 8,
@@ -174,7 +174,7 @@ Streaming server config:
 Streaming server request:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/audio/transcriptions \
+curl -N http://127.0.0.1:28670/v1/audio/transcriptions \
   -F model=voxtral-stream \
   -F stream=true \
   -F file=@assets/resources/sample.wav

@@ -150,7 +150,7 @@ build/bin/audiocpp_cli --task tts --mode streaming --family soprano_tts \
 ```json
 {
   "host": "127.0.0.1",
-  "port": 8080,
+  "port": 28670,
   "models": [
     {
       "id": "soprano",
@@ -167,7 +167,7 @@ build/bin/audiocpp_cli --task tts --mode streaming --family soprano_tts \
 audiocpp_server --config server.json
 
 # OpenAI-compatible TTS endpoint
-curl http://127.0.0.1:8080/v1/audio/speech \
+curl http://127.0.0.1:28670/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{
     "model": "soprano",

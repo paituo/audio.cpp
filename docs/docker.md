@@ -117,10 +117,10 @@ writable model directory and expose the server port:
 
 ```bash
 docker run --rm --gpus all \
-  -p 8080:8080 \
+  -p 28670:28670 \
   -v "<models-dir>:/app/models" \
   ghcr.io/0xshug0/audio.cpp:full-cuda12 \
-  server --ui --ui-management --host 0.0.0.0 --port 8080 --backend cuda
+  server --ui --ui-management --host 0.0.0.0 --port 28670 --backend cuda
 ```
 
 For Vulkan, expose the host render device and use the Vulkan backend:
@@ -129,13 +129,13 @@ For Vulkan, expose the host render device and use the Vulkan backend:
 docker run --rm --device /dev/dri \
   --group-add "$(getent group render | cut -d: -f3)" \
   --group-add "$(getent group video | cut -d: -f3)" \
-  -p 8080:8080 \
+  -p 28670:28670 \
   -v "<models-dir>:/app/models" \
   ghcr.io/0xshug0/audio.cpp:full-vulkan \
-  server --ui --ui-management --host 0.0.0.0 --port 8080 --backend vulkan
+  server --ui --ui-management --host 0.0.0.0 --port 28670 --backend vulkan
 ```
 
-Open `http://127.0.0.1:8080` on the host. Use a writable mount when the UI
+Open `http://127.0.0.1:28670` on the host. Use a writable mount when the UI
 should download or prepare models. For a read-only model directory, omit
 `--ui-management` or mount the directory as read-only and load only models that
 already exist in the configured path.

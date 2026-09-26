@@ -1756,7 +1756,7 @@ HttpResponse ServerState::handle_ui_asset() const {
     response.content_type = "text/html; charset=utf-8";
     const auto html = embedded_ui_html();
     response.body.assign(html.data(), html.size());
-    // The WebUI shares the server origin (usually localhost:8080) with any app
+    // The WebUI shares the server origin (usually localhost:28670) with any app
     // that previously occupied that port. Never let an old shell survive a
     // server upgrade, and ask the browser to discard only cached resources.
     // Deliberately omit the Clear-Site-Data "storage" directive: saved voices,
