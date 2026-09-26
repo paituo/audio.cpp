@@ -5,6 +5,9 @@
 #include "engine/framework/runtime/options.h"
 #include "engine/framework/runtime/spec_backed_model.h"
 #include "engine/community_models/confucius4_r2t2/text_postprocess.h"
+#include "engine/models/qwen3_asr/assets.h"
+#include "engine/models/qwen3_forced_aligner/processor.h"
+#include "engine/models/silero_vad/session.h"
 
 #include <algorithm>
 #include <chrono>
@@ -148,9 +151,36 @@ R2T2ASRSession::R2T2ASRSession(
             key != "confucius4_r2t2.unfixed_chunk_num" &&
             key != "confucius4_r2t2.unfixed_token_num" &&
             key != "confucius4_r2t2.rollback_punctuation" &&
-            key != "confucius4_r2t2.max_tokens") {
+            key != "confucius4_r2t2.max_tokens" &&
+            key != "confucius4_r2t2.forced_aligner_model_path" &&
+            key != "confucius4_r2t2.vad_model_path") {
             throw std::runtime_error("unknown R2T2 ASR session option: " + key);
         }
+    }
+    if (const auto aligner_path = runtime::find_option(
+            options.options,
+            {"confucius4_r2t2.forced_aligner_model_path", "confucius4_r2t2.aligner_model_path"})) {
+        runtime::SessionOptions aligner_options;
+        aligner_options.backend = options.backend;
+        for (const auto & [key, value] : options.options) {
+            if (key.rfind("qwen3_forced_aligner.", 0) == 0) {
+                aligner_options.options.emplace(key, value);
+            }
+        }
+        auto aligner_assets = engine::models::qwen3_asr::load_qwen3_asr_assets(
+            std::filesystem::path(*aligner_path), "qwen3_forced_aligner");
+        aligner_sample_rate_ = aligner_assets->config.sample_rate;
+        forced_aligner_session_ = std::make_unique<engine::models::qwen3_forced_aligner::Qwen3ForcedAlignerSession>(
+            runtime::TaskSpec{runtime::VoiceTaskKind::Alignment, runtime::RunMode::Offline},
+            aligner_options,
+            std::move(aligner_assets));
+    }
+    // Optional VAD chunking model path for audio_chunk_mode=vad. Defaults to
+    // the framework-bundled silero_vad model, mirroring the other ASR families.
+    if (const auto vad_path = runtime::find_option(options.options, {"confucius4_r2t2.vad_model_path"})) {
+        vad_model_path_ = *vad_path;
+    } else {
+        vad_model_path_ = "assets/framework/models/silero_vad";
     }
     assets_->model_weights->release_storage();
 }
@@ -174,6 +204,24 @@ void R2T2ASRSession::prepare(const runtime::SessionPreparationRequest & request)
     mark_prepared();
 }
 
+runtime::IOfflineVoiceTaskSession & R2T2ASRSession::vad_session() {
+    if (vad_session_ == nullptr) {
+        runtime::ModelLoadRequest load_request;
+        load_request.model_path = vad_model_path_;
+        vad_model_ = engine::models::silero_vad::load_silero_vad_model(load_request);
+        auto session = vad_model_->create_task_session(
+            runtime::TaskSpec{runtime::VoiceTaskKind::Vad, runtime::RunMode::Offline},
+            runtime::SessionOptions{options().backend, {}});
+        auto * offline = dynamic_cast<runtime::IOfflineVoiceTaskSession *>(session.get());
+        if (offline == nullptr) {
+            throw std::runtime_error("R2T2 ASR internal VAD session does not support offline execution");
+        }
+        session.release();
+        vad_session_.reset(offline);
+    }
+    return *vad_session_;
+}
+
 R2T2ASRRequest R2T2ASRSession::make_request(const runtime::TaskRequest & request) const {
     if (!request.audio_input.has_value()) {
         throw std::runtime_error("R2T2 ASR run() requires audio_input");
@@ -193,6 +241,12 @@ R2T2ASRRequest R2T2ASRSession::make_request(const runtime::TaskRequest & request
         if (out.generation.max_new_tokens <= 0) {
             throw std::runtime_error("R2T2 ASR max_tokens must be positive");
         }
+    }
+    if (const auto value = runtime::find_option(request.options, {"return_timestamps"})) {
+        out.generation.return_timestamps = runtime::parse_bool_option(*value, "return_timestamps");
+    }
+    if (const auto value = runtime::find_option(request.options, {"clamp_timestamps_to_audio"})) {
+        out.generation.clamp_timestamps_to_audio = runtime::parse_bool_option(*value, "clamp_timestamps_to_audio");
     }
     if (!out.language.empty()) {
         out.language = resolve_language(out.language);
@@ -215,6 +269,29 @@ R2T2ASRResult R2T2ASRSession::run_single(const R2T2ASRRequest & request) {
     const auto parsed = parse_asr_output(raw, request.language);
     result.language = parsed.language.empty() ? request.language : parsed.language;
     result.text = truncate_at_pipe(parsed.text);
+    if (request.generation.return_timestamps) {
+        if (forced_aligner_session_ == nullptr) {
+            throw std::runtime_error(
+                "R2T2 ASR timestamp output requires --session-option "
+                "confucius4_r2t2.forced_aligner_model_path=<path-to-Qwen3-ForcedAligner-0.6B>");
+        }
+        if (result.language.empty()) {
+            throw std::runtime_error("R2T2 ASR timestamp output requires a requested or detected language");
+        }
+        if (!result.text.empty() &&
+            engine::models::qwen3_forced_aligner::has_alignable_words(result.text, result.language)) {
+            runtime::TaskRequest align_request;
+            align_request.audio_input = request.audio;
+            align_request.text_input = runtime::Transcript{result.text, result.language};
+            align_request.options["audio_chunk_mode"] = "none";
+            if (request.generation.clamp_timestamps_to_audio) {
+                align_request.options["clamp_timestamps_to_audio"] = "true";
+            }
+            forced_aligner_session_->prepare(runtime::build_preparation_request(align_request));
+            auto aligned = forced_aligner_session_->run(align_request);
+            result.word_timestamps = std::move(aligned.word_timestamps);
+        }
+    }
     debug::timing_log_scalar("confucius4_r2t2.single_ms", engine::debug::elapsed_ms(wall_start));
     debug::trace_log_scalar("confucius4_r2t2.audio_frames", features.frames);
     return result;
@@ -230,21 +307,41 @@ runtime::TaskResult R2T2ASRSession::run(const runtime::TaskRequest & request) {
     const int64_t frames_per_chunk = std::max<int64_t>(
         1,
         static_cast<int64_t>(std::llround(kOfflineChunkSeconds * static_cast<double>(audio.sample_rate))));
-    // Use the framework chunk planner so padding and tail alignment stay
-    // consistent with the other ASR families instead of hand-rolling slices.
-    const auto chunk_spans = engine::audio::plan_audio_chunks(
-        frames,
-        engine::audio::AudioChunkSpec{
+
+    // Chunking: default is the fixed 30s hard-slice (framework planner for
+    // padding/tail consistency). Opt-in audio_chunk_mode=vad instead cuts on
+    // speech/silence boundaries so words/sentences are not clipped across a
+    // rigid window, mirroring the other ASR families that support VAD chunking.
+    std::vector<runtime::TimeSpan> spans;
+    const auto chunk_mode = engine::audio::parse_audio_chunk_mode(request.options);
+    if (chunk_mode == engine::audio::AudioChunkMode::Vad) {
+        const auto vad_options = engine::audio::VadAudioChunkOptions{
             frames_per_chunk,
-            frames_per_chunk,
-            engine::audio::AudioChunkPadMode::Zero,
-            engine::audio::AudioChunkTailAlignment::Start,
-            0,
-        });
+            static_cast<int64_t>(std::llround(0.5 * static_cast<double>(audio.sample_rate))),
+            static_cast<int64_t>(std::llround(0.25 * static_cast<double>(audio.sample_rate))),
+        };
+        spans = engine::audio::plan_vad_audio_chunks(audio, vad_session(), vad_options);
+        debug::trace_log_scalar("confucius4_r2t2.vad.chunks", static_cast<double>(spans.size()));
+    } else {
+        const auto chunk_spans = engine::audio::plan_audio_chunks(
+            frames,
+            engine::audio::AudioChunkSpec{
+                frames_per_chunk,
+                frames_per_chunk,
+                engine::audio::AudioChunkPadMode::Zero,
+                engine::audio::AudioChunkTailAlignment::Start,
+                0,
+            });
+        spans.reserve(chunk_spans.size());
+        for (const auto & s : chunk_spans) {
+            spans.push_back(runtime::TimeSpan{s.output_start_sample, s.output_start_sample + s.valid_samples});
+        }
+    }
+
     runtime::TaskResult merged;
     std::ostringstream text;
-    for (const auto & span : chunk_spans) {
-        const auto valid_span = runtime::TimeSpan{span.output_start_sample, span.output_start_sample + span.valid_samples};
+    std::vector<runtime::WordTimestamp> merged_word_timestamps;
+    for (const auto & valid_span : spans) {
         runtime::TaskRequest item_request = request;
         item_request.audio_input = engine::audio::slice_audio_buffer(audio, valid_span);
         auto item = run_single(make_request(item_request));
@@ -261,11 +358,21 @@ runtime::TaskResult R2T2ASRSession::run(const runtime::TaskRequest & request) {
                 merged.text_output->language = item.language;
             }
         }
+        if (!item.word_timestamps.empty() && aligner_sample_rate_ > 0) {
+            engine::audio::append_chunk_word_timestamps(
+                merged_word_timestamps,
+                item.word_timestamps,
+                valid_span,
+                valid_span,
+                audio.sample_rate,
+                aligner_sample_rate_);
+        }
     }
     if (merged.text_output == std::nullopt) {
         merged.text_output = runtime::Transcript{"", ""};
     }
     merged.text_output->text = text.str();
+    merged.word_timestamps = std::move(merged_word_timestamps);
     return merged;
 }
 
@@ -428,6 +535,12 @@ void R2T2ASRSession::start_stream(const runtime::TaskRequest & request) {
     require_prepared("R2T2 ASR start_stream()");
     if (task_.mode != runtime::RunMode::Streaming) {
         throw std::runtime_error("R2T2 ASR start_stream() requires a streaming session");
+    }
+    if (const auto value = runtime::find_option(request.options, {"return_timestamps"});
+        value.has_value() && runtime::parse_bool_option(*value, "return_timestamps")) {
+        throw std::runtime_error(
+            "R2T2 ASR streaming does not support return_timestamps; "
+            "use the offline transcription path for word-level timestamps");
     }
     reset();
     streaming_request_ = request;

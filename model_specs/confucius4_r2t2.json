@@ -46,7 +46,8 @@
   ],
   "capabilities": {
     "asr": [
-      "partial_results"
+      "partial_results",
+      "word_timestamps"
     ]
   },
   "runtime": {
@@ -193,6 +194,20 @@
         "required": false,
         "default": 512,
         "description": "Offline decode budget."
+      },
+      {
+        "name": "return_timestamps",
+        "type": "bool",
+        "required": false,
+        "default": false,
+        "description": "Request word-level timestamps. Requires session option confucius4_r2t2.forced_aligner_model_path pointing at a Qwen3-ForcedAligner-0.6B model."
+      },
+      {
+        "name": "clamp_timestamps_to_audio",
+        "type": "bool",
+        "required": false,
+        "default": false,
+        "description": "Opt-in guard for word timestamp output: keep repaired forced-aligner word spans inside the allocating audio chunk."
       }
     ],
     "session": [
@@ -288,6 +303,12 @@
         "required": false,
         "default": 64,
         "description": "Thinker weight context in MB."
+      },
+      {
+        "name": "forced_aligner_model_path",
+        "type": "string",
+        "required": false,
+        "description": "Path to a Qwen3-ForcedAligner-0.6B model directory (config + gguf). Enables word-level timestamp output; without it return_timestamps fails at run time."
       }
     ],
     "load": []

@@ -8,6 +8,8 @@
 #include "engine/community_models/confucius4_r2t2/thinker.h"
 #include "engine/community_models/confucius4_r2t2/tokenizer_text.h"
 #include "engine/community_models/confucius4_r2t2/types.h"
+#include "engine/models/qwen3_asr/assets.h"
+#include "engine/models/qwen3_forced_aligner/session.h"
 
 #include <chrono>
 #include <cstdint>
@@ -98,6 +100,20 @@ private:
     R2T2ASRWhisperFrontend frontend_;
     R2T2ASRAudioEncoderRuntime audio_encoder_;
     R2T2ASRThinkerRuntime thinker_;
+
+    // Token-level word timestamps come from the shared Qwen3-ForcedAligner
+    // (same as Qwen3-ASR); instantiated only when the user supplies
+    // confucius4_r2t2.forced_aligner_model_path and requests return_timestamps.
+    std::unique_ptr<engine::models::qwen3_forced_aligner::Qwen3ForcedAlignerSession> forced_aligner_session_;
+    int32_t aligner_sample_rate_ = 0;
+
+    // Optional Silero-VAD boundary chunking. Backed by the same silero_vad
+    // model family the framework uses for audio_chunk_mode=vad; only instantiated
+    // (lazily) when the user passes request option audio_chunk_mode=vad.
+    std::string vad_model_path_;
+    std::unique_ptr<runtime::ILoadedVoiceModel> vad_model_;
+    std::unique_ptr<runtime::IOfflineVoiceTaskSession> vad_session_;
+    runtime::IOfflineVoiceTaskSession & vad_session();
 
     // Streaming state (mirrors ASRStreamingState in the reference code).
     runtime::TaskRequest streaming_request_;
